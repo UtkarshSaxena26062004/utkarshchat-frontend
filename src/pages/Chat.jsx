@@ -147,17 +147,19 @@ import ChatWindow from "../components/ChatWindow";
 const Chat = () => {
   const { user } = useAuth();
   const { socket, onlineUsers } = useSocket();
+
   const [contacts, setContacts] = useState([]);
   const [conversations, setConversations] = useState([]);
   const [activeConversation, setActiveConversation] = useState(null);
 
-  // Contacts + conversations fetch
+  // Fetch contacts + conversations
   const loadData = useCallback(async () => {
     try {
       const [contactsRes, convosRes] = await Promise.all([
         api.get("/api/chat/contacts"),
         api.get("/api/chat/conversations"),
       ]);
+
       setContacts(contactsRes.data);
       setConversations(convosRes.data);
 
@@ -170,9 +172,7 @@ const Chat = () => {
   }, [activeConversation]);
 
   useEffect(() => {
-    if (user) {
-      loadData();
-    }
+    if (user) loadData();
   }, [user, loadData]);
 
   // SOCKET LISTENERS
@@ -187,7 +187,6 @@ const Chat = () => {
 
       setConversations((prev) => {
         const exists = prev.some((c) => c._id === convId);
-
         if (!exists) {
           loadData();
           return prev;
@@ -215,58 +214,59 @@ const Chat = () => {
       });
     };
 
-    const handleMessageDeleted = ({ messageId, conversationId }) => {
+    const handleDelete = ({ messageId, conversationId }) => {
       setActiveConversation((prev) => {
         if (!prev || prev._id !== conversationId) return prev;
         return {
           ...prev,
-          messages: (prev.messages || []).filter((m) => m._id !== messageId),
+          messages: prev.messages.filter((m) => m._id !== messageId),
         };
       });
-
-      setConversations((prev) =>
-        prev.map((c) => {
-          if (c._id !== conversationId) return c;
-          if (c.lastMessage && c.lastMessage._id === messageId) {
-            return { ...c, lastMessage: null };
-          }
-          return c;
-        })
-      );
     };
 
     socket.on("new-message", handleNewMessage);
     socket.on("typing", handleTyping);
-    socket.on("message-deleted", handleMessageDeleted);
+    socket.on("message-deleted", handleDelete);
 
     return () => {
       socket.off("new-message", handleNewMessage);
       socket.off("typing", handleTyping);
-      socket.off("message-deleted", handleMessageDeleted);
+      socket.off("message-deleted", handleDelete);
     };
   }, [socket, user?._id, loadData]);
 
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center px-2 py-3">
-      <div
-        className="
-          flex flex-col sm:flex-row
-          w-full max-w-6xl h-[90vh]
-          rounded-3xl bg-slate-900/80 border border-slate-800
-          shadow-[0_0_120px_-40px_rgba(16,185,129,0.7)]
-          overflow-hidden
-        "
-      >
-        <Sidebar
-          user={user}
-          contacts={contacts}
-          conversations={conversations}
-          setConversations={setConversations}
-          activeConversation={activeConversation}
-          setActiveConversation={setActiveConversation}
-          onlineUsers={onlineUsers}
-        />
 
+      {/* OUTER WRAPPER */}
+      <div className="flex flex-col sm:flex-row w-full max-w-6xl h-[90vh] 
+                      rounded-3xl bg-slate-900/80 border border-slate-800 
+                      shadow-[0_0_120px_-40px_rgba(16,185,129,0.7)] overflow-hidden">
+
+        {/* SIDEBAR ONLY IF (desktop) OR (mobile AND no active chat) */}
+        {(!activeConversation || window.innerWidth >= 640) && (
+          <Sidebar
+            user={user}
+            contacts={contacts}
+            conversations={conversations}
+            setConversations={setConversations}
+            activeConversation={activeConversation}
+            setActiveConversation={setActiveConversation}
+            onlineUsers={onlineUsers}
+          />
+        )}
+
+        {/* MOBILE BACK BUTTON */}
+        {activeConversation && window.innerWidth < 640 && (
+          <div
+            className="sm:hidden p-2 text-xs bg-slate-800 text-slate-300 cursor-pointer"
+            onClick={() => setActiveConversation(null)}
+          >
+            ← Back
+          </div>
+        )}
+
+        {/* CHAT WINDOW */}
         <ChatWindow
           user={user}
           activeConversation={activeConversation}
@@ -278,4 +278,3 @@ const Chat = () => {
 };
 
 export default Chat;
-
